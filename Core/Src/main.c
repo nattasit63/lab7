@@ -54,16 +54,17 @@ uint64_t Timestamp_Encoder = 0;
 float rpm=0;
 float data[10]={0};
 float mean=0;
-float PWMOut=3000;
+int32_t PWMOut=3000;
 float error=0;
 float setrpm=15;
 float p=0;
 float i=0;
 float d=0;
 float pre_error=0;
-float kp=1;
-float ki=1;
+float kp=100;
+float ki=5;
 float kd=1;
+int32_t PWMOutABS =0;
 uint8_t n=0;
 
 
@@ -154,7 +155,7 @@ int main(void)
 			Timestamp_Encoder = micros();
 			EncoderVel = (EncoderVel * 99 + EncoderVelocity_Update()) / 100.0;
 			pid();
-			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, PWMOut);
+			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, PWMOutABS);
 			if(n<10)
 			{
 			n+=1;
@@ -556,6 +557,18 @@ void pid()
  d = error - pre_error;
  pre_error = error;
  PWMOut = (p*kp)+(i*ki)+(d*kd);
+ if (PWMOut<0)
+ {
+	 PWMOutABS = -1*PWMOut;
+	 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
+	 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
+ }
+ else
+ {
+	 PWMOutABS = PWMOut;
+	 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, 1);
+	 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_5, 0);
+ }
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
