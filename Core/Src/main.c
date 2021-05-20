@@ -140,13 +140,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-//		//RAW Read
-//		if (micros() - Timestamp_Encoder >= 1000)
-//		{
-//			Timestamp_Encoder = micros();
-//			EncoderVel = EncoderVelocity_Update();
-//		}
-//
+
 
 
 		//Add LPF?
