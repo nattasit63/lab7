@@ -61,9 +61,9 @@ float p=0;
 float i=0;
 float d=0;
 float pre_error=0;
-float kp=100;
-float ki=5;
-float kd=1;
+float kp=350;
+float ki=15;
+float kd=300;
 int32_t PWMOutABS =0;
 uint8_t n=0;
 
@@ -150,10 +150,10 @@ int main(void)
 
 
 		//Add LPF?
-		if (micros() - Timestamp_Encoder >= 15000)
+		if (micros() - Timestamp_Encoder >= 8000)
 		{
 			Timestamp_Encoder = micros();
-			EncoderVel = (EncoderVel * 99 + EncoderVelocity_Update()) / 100.0;
+			EncoderVel = EncoderVelocity_Update();
 			pid();
 			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, PWMOutABS);
 			if(n<10)
@@ -531,26 +531,17 @@ float EncoderVelocity_Update()
 
 	//Calculate velocity
 	//EncoderTimeDiff is in uS
-	data[n] =(float)(EncoderPositionDiff * 1000000.00*60.00/3072.00) / (float) EncoderTimeDiff;
+	data[n] =(((float)(EncoderPositionDiff * 1000000.00*60.00/3072.00) / (float) EncoderTimeDiff)+mean)/2.0;
 	for (register int k;k<10;k++)
 	{
 	sum+=data[k];
 	}
-	mean = (float)sum/10;
+	mean = (float)((2*sum)+(mean))/21.00;
 	return  (float)(EncoderPositionDiff * 1000000) / (float) EncoderTimeDiff;
 }
 
 void pid()
 {
-// static float error=0;
-// static float setrpm=15;
-// static float p=0;
-// static float i=0;
-// static float d=0;
-// static float pre_error=0;
-// static float kp=100;
-// static float ki=0;
-// static float kd=0;
  error = setrpm - mean;
  p = (error);
  i = i+error;
@@ -562,12 +553,24 @@ void pid()
 	 PWMOutABS = -1*PWMOut;
 	 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
 	 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
+	 if(setrpm==0)
+	 {
+		 PWMOutABS = 0;
+		 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
+		 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
+	 }
  }
  else
  {
 	 PWMOutABS = PWMOut;
 	 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, 1);
 	 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_5, 0);
+	 if(setrpm==0)
+		 {
+			 PWMOutABS = 0;
+			 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
+			 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
+		 }
  }
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
