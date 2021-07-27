@@ -22,7 +22,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -53,8 +53,8 @@ float EncoderVel = 0;
 uint64_t Timestamp_Encoder = 0;
 float rpm=0;
 float data[10]={0};
-float mean=0;
-int32_t PWMOut=3000;
+float raw=0;
+int32_t PWMOut=0;
 float error=0;
 float setrpm=15;
 float p=0;
@@ -62,12 +62,14 @@ float i=0;
 float d=0;
 float pre_error=0;
 float kp=350;
-float ki=15;
-float kd=300;
+float ki=3.5;
+float kd=10;
 int32_t PWMOutABS =0;
-uint8_t n=0;
-
-
+uint8_t n=0;uint8_t push=0;
+float a=2.3;float w=8;float rad=0;
+float Q=0;float R=0;float theta_est=0;float omega_est=0;float dt=0.01;float theta_pd=0;float y=0;float p11=0;
+float p12=0;float p21=0;float p22=0;float omega_pd=0;float a0=0;float a1=0;float a2=0;float a3=0;float a4=0;float a5=0;
+float sb=0;float sa=0;float tf=0;float vb=0;float sbf=0;float t=0;float Vmax=0;float vcon =0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -83,6 +85,8 @@ uint64_t micros();
 
 float EncoderVelocity_Update();
 void pid();
+void kalmanfilter();
+void planning();
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -124,12 +128,11 @@ int main(void)
   MX_TIM3_Init();
   MX_TIM4_Init();
   /* USER CODE BEGIN 2 */
-	HAL_TIM_Base_Start_IT(&htim2);
+	//HAL_TIM_Base_Start_IT(&htim3);
 	HAL_TIM_Encoder_Start(&htim1, TIM_CHANNEL_ALL);
-//	HAL_TIM_Base_Start(&htim3);
-//	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
-	//HAL_TIM_Base_Start(&htim4);
-	HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_1);
+
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -140,24 +143,9 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-
-
-
-		//Add LPF?
-		if (micros() - Timestamp_Encoder >= 8000)
-		{
-			Timestamp_Encoder = micros();
-			EncoderVel = EncoderVelocity_Update();
-			pid();
-			__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, PWMOutABS);
-			if(n<10)
-			{
-			n+=1;
-			}else
-			{
-			n=0;
-			}
-		}
+		if(push==1)
+		{push=0;
+		HAL_TIM_Base_Start_IT(&htim3);}
 
 	}
   /* USER CODE END 3 */
@@ -316,7 +304,6 @@ static void MX_TIM3_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_OC_InitTypeDef sConfigOC = {0};
 
   /* USER CODE BEGIN TIM3_Init 1 */
 
@@ -324,7 +311,7 @@ static void MX_TIM3_Init(void)
   htim3.Instance = TIM3;
   htim3.Init.Prescaler = 0;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 10000;
+  htim3.Init.Period = 65535;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -336,28 +323,15 @@ static void MX_TIM3_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 5000;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
   /* USER CODE BEGIN TIM3_Init 2 */
 
   /* USER CODE END TIM3_Init 2 */
-  HAL_TIM_MspPostInit(&htim3);
 
 }
 
@@ -382,7 +356,7 @@ static void MX_TIM4_Init(void)
   htim4.Instance = TIM4;
   htim4.Init.Prescaler = 0;
   htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim4.Init.Period = 10000;
+  htim4.Init.Period = 20000;
   htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
@@ -396,7 +370,7 @@ static void MX_TIM4_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 5000;
+  sConfigOC.Pulse = 0;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
   if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
@@ -493,50 +467,28 @@ static void MX_GPIO_Init(void)
 
 
 float EncoderVelocity_Update()
-{
-	//Save Last state
-	static uint32_t EncoderLastPosition = 0;
+{   static uint32_t EncoderLastPosition = 0;
 	static uint64_t EncoderLastTimestamp = 0;
-	float sum=0;
-
-	//read data
 	uint32_t EncoderNowPosition = HTIM_ENCODER.Instance->CNT;
 	uint64_t EncoderNowTimestamp = micros();
-
 	int32_t EncoderPositionDiff;
 	uint64_t EncoderTimeDiff;
-
 	EncoderTimeDiff = EncoderNowTimestamp - EncoderLastTimestamp;
 	EncoderPositionDiff = EncoderNowPosition - EncoderLastPosition;
-
-	//compensate overflow and underflow
 	if (EncoderPositionDiff >= MAX_SUBPOSITION_OVERFLOW)
-	{
-		EncoderPositionDiff -= MAX_ENCODER_PERIOD;
-	}
+	{EncoderPositionDiff -= MAX_ENCODER_PERIOD;}
 	else if (-EncoderPositionDiff >= MAX_SUBPOSITION_OVERFLOW)
-	{
-		EncoderPositionDiff += MAX_ENCODER_PERIOD;
-	}
-
-	//Update Position and time
+	{EncoderPositionDiff += MAX_ENCODER_PERIOD;}
 	EncoderLastPosition = EncoderNowPosition;
 	EncoderLastTimestamp = EncoderNowTimestamp;
-
-	//Calculate velocity
-	//EncoderTimeDiff is in uS
-	data[n] =(((float)(EncoderPositionDiff * 1000000.00*60.00/3072.00) / (float) EncoderTimeDiff)+mean)/2.0;
-	for (register int k;k<10;k++)
-	{
-	sum+=data[k];
-	}
-	mean = (float)((2*sum)+(mean))/21.00;
+	raw =(float)(EncoderPositionDiff * 1000000.00*60.00/3072.00) / (float) EncoderTimeDiff;
+	rad = (float)(0.10472*raw);
 	return  (float)(EncoderPositionDiff * 1000000) / (float) EncoderTimeDiff;
 }
 
 void pid()
 {
- error = setrpm - mean;
+ error = vcon -omega_est ;
  p = (error);
  i = i+error;
  d = error - pre_error;
@@ -545,33 +497,85 @@ void pid()
  if (PWMOut<0)
  {
 	 PWMOutABS = -1*PWMOut;
-	 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 1);
 	 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
-	 if(setrpm==0)
+	 if(vb==0)
 	 {
-		 PWMOutABS = 0;
-		 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
-		 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
+		 PWMOut=0;
+	     PWMOutABS = 0;
+	     omega_est=0;
+	     theta_est=0;
+	     omega_pd=0;
+	     theta_pd=0;
 	 }
  }
  else
- {
-	 PWMOutABS = PWMOut;
+ {   PWMOutABS = PWMOut;
 	 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, 1);
-	 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_5, 0);
-	 if(setrpm==0)
+	 if(vb==0)
 		 {
-			 PWMOutABS = 0;
-			 HAL_GPIO_WritePin(GPIOB, GPIO_PIN_5, 0);
-			 HAL_GPIO_WritePin(GPIOB ,GPIO_PIN_3, 0);
+		 PWMOut=0;
+		 PWMOutABS = 0;
+		 omega_est=0;
+		 omega_pd=0;
 		 }
  }
+ __HAL_TIM_SET_COMPARE(&htim4, TIM_CHANNEL_1, PWMOutABS);
+
+}
+
+void kalmanfilter()
+{    Q = pow(a,2);
+	 R = pow(w,2);
+	 theta_est = theta_pd + omega_pd*dt;
+	 omega_est = omega_pd;
+	 y = (rad-omega_est);
+
+    p11 = p11 + dt*p21+ (Q*pow(dt,4))/4 + (pow(dt,2))*(p12+dt*p22)/dt;
+    p12 = p12 + dt*p22 + (Q*dt*pow(dt,2))/2;
+    p21 = (2*dt*p21+Q*pow(dt,4) + 2*p22*pow(dt,2))/(2*dt);
+    p22 = Q*pow(dt,2)+p22;
+
+    theta_est+= (p12*y)/(R+p22);
+    omega_est+= (p22*y)/(R+p22);
+
+    p11=p11-(p12*p21)/(R+p22);
+    p12=p12-(p22*p21)/(R+p22);
+    p21=-p21*(p22/(R+p22)-1);
+    p22=-p22*(p22/(R+p22)-1);
+
+    theta_pd=theta_est;
+    omega_pd=omega_est;
+}
+
+void planning()
+
+{ t=t+0.01;
+  Vmax = 0.300;
+  sb=30*0.0174533;
+  sa=0;
+  a0=0;
+  a1=0;
+  a2=0;
+  a3= 10.00*(sb-sa)/(pow(tf,3));
+  a4= -15.00*(sb-sa)/(pow(tf,4));
+  a5= 6.00*(sb-sa)/(pow(tf,5));
+  tf = 15.00*(sb-sa)/(8.00*Vmax);
+  if(t<=tf){
+  sbf =  a3*pow(t,3)+a4*pow(t,4)+a5*pow(t,5);vb= (float)((3*a3*pow(t,2))+(4*a4*pow(t,3))+(5*a5*pow(t,4)));
+  vcon = 0.10472*vb;}
+  else{t=tf;vb=0;HAL_TIM_Base_Stop_IT(&htim3);}
 }
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	if (htim == &htim2)
 	{
 	_micros += 4294967295;
+	}
+	if (htim==&htim3)
+	{ EncoderVelocity_Update();
+	  planning();
+	  kalmanfilter();
+	  pid();
 	}
 }
 uint64_t micros()
